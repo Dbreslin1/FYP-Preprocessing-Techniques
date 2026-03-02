@@ -16,12 +16,12 @@ import nibabel as nib
 
 #Configuration
 srcID = 552 #baseline dataset ID
-dstID = 553 #new dataset ID
+dstID = 554 #new dataset ID
 
-nnUnet_raw = Path("/content/nnUnet_raw")
+nnUNet_raw = Path("/content/nnUNet_raw")  
+SRC = nnUNet_raw / f"Dataset{srcID:03d}_ImageTBAD_subX"
+DST = nnUNet_raw / f"Dataset{dstID:03d}_ImageTBAD_subX_clipz"
 
-SRC = nnUnet_raw / f"Dataset{srcID:03d}_ImageTBAD_subX"
-DST = nnUnet_raw / f"Dataset{dstID:03d}_ImageTBAD_subX_clipz"
 
 (DST / "imagesTr").mkdir(parents=True, exist_ok=True)
 (DST / "labelsTr").mkdir(parents=True, exist_ok=True)
