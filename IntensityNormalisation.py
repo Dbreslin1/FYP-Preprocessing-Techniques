@@ -43,22 +43,34 @@ def clip_and_foreground_zscore(img:np.ndarray,
     
     """ 
 
-# esimating the foreground mask
-# Thoracic CT contains a lot of air which can dominate the intensity distribution and make normalisation less effective.
-# To stop this im gonna use fg_threshold = 10th percentile intentsity
-# I'll also have foreground = voxels greater than this threshold
-# This tend to exclude most air while keeping the body tissues and cells taht I want which are important.
+    # esimating the foreground mask
+    # Thoracic CT contains a lot of air which can dominate the intensity distribution and make normalisation less effective.
+    # To stop this im gonna use fg_threshold = 10th percentile intentsity
+    # I'll also have foreground = voxels greater than this threshold
+    # This tend to exclude most air while keeping the body tissues and cells taht I want which are important.
 
-fg_threshold = np.percentile(img, fg_percentile)
-foreground_mask = img > fg_threshold
+    fg_threshold = np.percentile(img, fg_percentile)
+    foreground_mask = img > fg_threshold
 
-#safety check for if the mask is too small then just treat the whole volume as the foreground
-if foreground_mask.sum() < 1000:
-    foreground_mask = np.ones_like(img, dtype=bool)
+    #safety check for if the mask is too small then just treat the whole volume as the foreground
+    if foreground_mask.sum() < 1000:
+        foreground_mask = np.ones_like(img, dtype=bool)
 
-#2 clipping intensities
-#computed within foreground voxels only so that the bonds reflect tissue intensities and not air or other outliers
-vals = img[foreground_mask]
-lo = np.percentile(vals, p_lo)
-hi = np.percentile(vals, p_hi)
-img_clipped = np.clip(img, lo, hi)
+    #2 clipping intensities
+    #computed within foreground voxels only so that the bonds reflect tissue intensities and not air or other outliers
+    vals = img[foreground_mask]
+    lo = np.percentile(vals, p_lo)
+    hi = np.percentile(vals, p_hi)
+    img_clipped = np.clip(img, lo, hi)
+
+    #z score normalisation using foreground voxels only
+    mu = img_clipped[foreground_mask].mean()
+    sigma = img_clipped[foreground_mask].std() + 1e-8 # added small value to avoid division by zero
+
+    out = np.zeros_like(img_clipped, dtype=np.float32)
+    out[foreground_mask] = (img_clipped[foreground_mask] - mu) / sigma
+
+    #outside foreground set to 0
+    out[~foreground_mask] = 0.0
+
+    return out
