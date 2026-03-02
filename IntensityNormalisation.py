@@ -74,3 +74,32 @@ def clip_and_foreground_zscore(img:np.ndarray,
     out[~foreground_mask] = 0.0
 
     return out
+
+#processing the images
+for img_path in sorted((SRC / "imagesTr").glob("*.nii.gz")):
+    nii = nib.load(str(img_path))
+
+    #load image and change it from float 64 to 32 cause memory is an issue with images
+    img = nii.get_fdata().astype(np.float32)
+
+    # Apply normalisation
+    img_norm = clip_and_foreground_zscore(img, p_lo=0.5, p_hi=99.5, fg_percentile=10.0)
+
+    # Save output image preserving geometry 
+    out_nii = nib.Nifti1Image(img_norm, affine=nii.affine, header=nii.header)
+    out_nii.set_data_dtype(np.float32)
+
+    nib.save(out_nii, str(DST / "imagesTr" / img_path.name))
+
+# Write dataset.json for the new dataset 
+src_json = json.load(open(SRC / "dataset.json", "r"))
+dst_json = dict(src_json)
+
+dst_json["name"] = f"{src_json.get('name','ImageTBAD')}_clipz"
+dst_json["file_ending"] = ".nii.gz"
+
+with open(DST / "dataset.json", "w") as f:
+    json.dump(dst_json, f, indent=2)
+
+print("Created:", DST)
+print("Labels unchanged; images normalised with clip + foreground z score.")
