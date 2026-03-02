@@ -25,3 +25,33 @@ DST = nnUnet_raw / f"Dataset{dstID:03d}_ImageTBAD_subX_clipz"
 
 (DST / "imagesTr").mkdir(parents=True, exist_ok=True)
 (DST / "labelsTr").mkdir(parents=True, exist_ok=True)
+
+#Copying the labels but not changing the masks
+for lab_path in sorted((SRC / "labelsTr").glob("*.nii.gz")):
+    shutil.copy2(lab_path, DST / "labelsTr" / lab_path.name)
+
+def clip_and_foreground_zscore(img:np.ndarray,
+                               p_lo: float = 0.5,
+                               p_hi: float = 99.5,
+                               fg_percentile: float = 10.0) -> np.ndarray:
+        
+    """
+    img: 3D float 32 image colume
+    p lo and p hi are percintiles for robust clipping
+    fg percentile is the lw percentile used to define a foreground ish looking mask
+    It returns a float 32 normlised image 
+    
+    """ 
+
+# esimating the foreground mask
+# Thoracic CT contains a lot of air which can dominate the intensity distribution and make normalisation less effective.
+# To stop this im gonna use fg_threshold = 10th percentile intentsity
+# I'll also have foreground = voxels greater than this threshold
+# This tend to exclude most air while keeping the body tissues and cells taht I want which are important.
+
+fg_threshold = np.percentile(img, fg_percentile)
+foreground_mask = img > fg_threshold
+
+#safety check for if the mask is too small then just treat the whole volume as the foreground
+if foreground_mask.sum() < 1000:
+    foreground_mask = np.ones_like(img, dtype=bool)
