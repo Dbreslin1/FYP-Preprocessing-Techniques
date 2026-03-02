@@ -55,3 +55,10 @@ foreground_mask = img > fg_threshold
 #safety check for if the mask is too small then just treat the whole volume as the foreground
 if foreground_mask.sum() < 1000:
     foreground_mask = np.ones_like(img, dtype=bool)
+
+#2 clipping intensities
+#computed within foreground voxels only so that the bonds reflect tissue intensities and not air or other outliers
+vals = img[foreground_mask]
+lo = np.percentile(vals, p_lo)
+hi = np.percentile(vals, p_hi)
+img_clipped = np.clip(img, lo, hi)
