@@ -23,9 +23,9 @@ HU_HI = 500.0
 
 CROP_MARGIN =16 #ROI cropping margin
 
-nnUNet_raw = Path("/content/drive/MyDrive/FYP_nnUNet/nnUNet_raw")  
-SRC = nnUNet_raw / f"Dataset{srcID:03d}_ImageTBAD"
-DST = nnUNet_raw / f"Dataset{dstID:03d}_ImageTBAD_HUwin"
+nnUNet_raw = Path("/content/nnUNet_raw")  
+SRC = nnUNet_raw / "Dataset001_ImageTBAD"
+DST = nnUNet_raw / "Dataset002_ImageTBAD_HUwin"
 
 
 (DST / "imagesTr").mkdir(parents=True, exist_ok=True)
