@@ -18,7 +18,10 @@ import nibabel as nib
 srcID = 552 #baseline dataset ID
 dstID = 554 #new dataset ID
 
-nnUNet_raw = Path("/content/nnUNet_raw")  
+HU_LO = -200.0 #from testing air is around -2000 at the lowest so this is the cutoff 
+HU_HI = 500.0
+
+nnUNet_raw = Path("/content/drive/MyDrive/FYP_nnUNet/nnUNet_raw")  
 SRC = nnUNet_raw / f"Dataset{srcID:03d}_ImageTBAD_subX"
 DST = nnUNet_raw / f"Dataset{dstID:03d}_ImageTBAD_subX_clipz"
 
@@ -30,47 +33,29 @@ DST = nnUNet_raw / f"Dataset{dstID:03d}_ImageTBAD_subX_clipz"
 for lab_path in sorted((SRC / "labelsTr").glob("*.nii.gz")):
     shutil.copy2(lab_path, DST / "labelsTr" / lab_path.name)
 
-def clip_and_foreground_zscore(img:np.ndarray,
-                               p_lo: float = 0.5,
-                               p_hi: float = 99.5,
-                               fg_percentile: float = 10.0) -> np.ndarray:
-        
-    """
-    img: 3D float 32 image colume
-    p lo and p hi are percintiles for robust clipping
-    fg percentile is the lw percentile used to define a foreground ish looking mask
-    It returns a float 32 normlised image 
+def hu_window_and_fg_zscore(img: np.ndarray) -> np.ndarray:
     
-    """ 
 
-    # esimating the foreground mask
-    # Thoracic CT contains a lot of air which can dominate the intensity distribution and make normalisation less effective.
-    # To stop this im gonna use fg_threshold = 10th percentile intentsity
-    # I'll also have foreground = voxels greater than this threshold
-    # This tend to exclude most air while keeping the body tissues and cells taht I want which are important.
+    img = img.astype(np.float32)
 
-    fg_threshold = np.percentile(img, fg_percentile)
-    foreground_mask = img > fg_threshold
+    # 1) HU windowing
+    img_clipped = np.clip(img, HU_LO, HU_HI)
 
-    #safety check for if the mask is too small then just treat the whole volume as the foreground
+    # 2) Foreground mask
+    # Padding/air values are very low (-2000, -1000).
+    # Threshold at -150 HU removes most air and padding.
+    foreground_mask = img_clipped > -150.0
+
+    # Safety fallback
     if foreground_mask.sum() < 1000:
-        foreground_mask = np.ones_like(img, dtype=bool)
+        foreground_mask = np.ones_like(img_clipped, dtype=bool)
 
-    #2 clipping intensities
-    #computed within foreground voxels only so that the bonds reflect tissue intensities and not air or other outliers
-    vals = img[foreground_mask]
-    lo = np.percentile(vals, p_lo)
-    hi = np.percentile(vals, p_hi)
-    img_clipped = np.clip(img, lo, hi)
-
-    #z score normalisation using foreground voxels only
+    # 3) Foreground-only z-score
     mu = img_clipped[foreground_mask].mean()
-    sigma = img_clipped[foreground_mask].std() + 1e-8 # added small value to avoid division by zero
+    sigma = img_clipped[foreground_mask].std() + 1e-8
 
     out = np.zeros_like(img_clipped, dtype=np.float32)
     out[foreground_mask] = (img_clipped[foreground_mask] - mu) / sigma
-
-    #outside foreground set to 0
     out[~foreground_mask] = 0.0
 
     return out
@@ -83,7 +68,7 @@ for img_path in sorted((SRC / "imagesTr").glob("*.nii.gz")):
     img = nii.get_fdata().astype(np.float32)
 
     # Apply normalisation
-    img_norm = clip_and_foreground_zscore(img, p_lo=0.5, p_hi=99.5, fg_percentile=10.0)
+    img_norm = hu_window_and_fg_zscore(img)
 
     # Save output image preserving geometry 
     out_nii = nib.Nifti1Image(img_norm, affine=nii.affine, header=nii.header)
@@ -102,4 +87,5 @@ with open(DST / "dataset.json", "w") as f:
     json.dump(dst_json, f, indent=2)
 
 print("Created:", DST)
+print("✅ HU window:", (HU_LO, HU_HI))
 print("Labels unchanged; images normalised with clip + foreground z score.")
