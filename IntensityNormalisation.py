@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 import numpy as np
 import nibabel as nib
-
+print("=== RUNNING UPDATED SCRIPT v2 (with resume + finally) ===")
 # -------------------------
 # Configuration
 # -------------------------
