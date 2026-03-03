@@ -15,8 +15,8 @@ import numpy as np
 import nibabel as nib
 
 #Configuration
-srcID = 552 #baseline dataset ID
-dstID = 554 #new dataset ID
+srcID = 1 #baseline dataset ID
+dstID = 2 #new dataset ID
 
 HU_LO = -200.0 #from testing air is around -2000 at the lowest so this is the cutoff 
 HU_HI = 500.0
@@ -24,8 +24,8 @@ HU_HI = 500.0
 CROP_MARGIN =16 #ROI cropping margin
 
 nnUNet_raw = Path("/content/drive/MyDrive/FYP_nnUNet/nnUNet_raw")  
-SRC = nnUNet_raw / f"Dataset{srcID:03d}_ImageTBAD_subX"
-DST = nnUNet_raw / f"Dataset{dstID:03d}_ImageTBAD_subX_clipz"
+SRC = nnUNet_raw / f"Dataset{srcID:03d}_ImageTBAD"
+DST = nnUNet_raw / f"Dataset{dstID:03d}_ImageTBAD_HUwin"
 
 
 (DST / "imagesTr").mkdir(parents=True, exist_ok=True)
