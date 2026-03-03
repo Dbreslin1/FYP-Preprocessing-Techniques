@@ -78,6 +78,9 @@ def hu_window_and_fg_zscore(img):
 # -------------------------
 
 img_files = sorted((SRC / "imagesTr").glob("*.nii.gz"))
+print("SRC:", SRC)
+print("Total images found:", len(img_files))
+print("Last file:", img_files[-1].name)
 
 if len(img_files) == 0:
     raise FileNotFoundError(f"No images found in {SRC / 'imagesTr'}")
@@ -122,6 +125,8 @@ for img_path in img_files:
     nib.save(out_lab, str(DST / "labelsTr" / lab_path.name))
 
     written += 1
+    if written % 10 == 0:
+        print("Processed", written, "cases...")
 
 print(f"Wrote {written} cases to {DST.name}")
 
