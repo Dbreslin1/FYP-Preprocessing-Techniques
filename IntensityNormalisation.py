@@ -25,7 +25,7 @@ HU_LO = -200.0
 HU_HI = 500.0
 CROP_MARGIN = 16
 
-nnUNet_raw = Path("/content/drive/MyDrive/FYP_nnUNet/nnUNet_raw")
+nnUNet_raw = Path("/content/nnUNet_raw")
 
 SRC = nnUNet_raw / "Dataset001_ImageTBAD"
 DST = nnUNet_raw / "Dataset002_ImageTBAD_HUwin_fgZ_crop"
