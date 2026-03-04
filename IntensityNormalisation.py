@@ -126,14 +126,15 @@ try:
         # 3) Save outputs (SAFE headers)
         img_hdr = make_img_header_like(img_nii)
         out_img = nib.Nifti1Image(img_win.astype(np.int16), img_nii.affine, header=img_hdr)
-        out_img.set_qform(img_nii.get_qform(), code=img_nii.header.get_qform_code())
-        out_img.set_sform(img_nii.get_sform(), code=img_nii.header.get_sform_code())
+        out_img.set_qform(img_nii.get_qform())
+        out_img.set_sform(img_nii.get_sform())
+
 
         lab_hdr = make_lab_header_like(lab_nii)
+        
         out_lab = nib.Nifti1Image(lab.astype(np.uint8), lab_nii.affine, header=lab_hdr)
-        out_lab.set_qform(lab_nii.get_qform(), code=lab_nii.header.get_qform_code())
-        out_lab.set_sform(lab_nii.get_sform(), code=lab_nii.header.get_sform_code())
-
+        out_lab.set_qform(lab_nii.get_qform())
+        out_lab.set_sform(lab_nii.get_sform())
         nib.save(out_img, str(imagesTr_dst / img_path.name))
         nib.save(out_lab, str(labelsTr_dst / lab_path.name))
 
