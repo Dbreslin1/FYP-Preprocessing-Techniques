@@ -23,17 +23,12 @@ imagesTr_dst = DST / "imagesTr"
 labelsTr_dst = DST / "labelsTr"
 
 # IMPORTANT: wipe dst folders so you truly overwrite Dataset002
-if DST.exists():
-    # only delete imagesTr/labelsTr contents (keeps folder)
-    if imagesTr_dst.exists():
-        for p in imagesTr_dst.glob("*"):
-            p.unlink()
-    if labelsTr_dst.exists():
-        for p in labelsTr_dst.glob("*"):
-            p.unlink()
-
 imagesTr_dst.mkdir(parents=True, exist_ok=True)
 labelsTr_dst.mkdir(parents=True, exist_ok=True)
+for p in imagesTr_dst.glob("*"):
+    p.unlink()
+for p in labelsTr_dst.glob("*"):
+    p.unlink()
 
 # -------------------------
 # Helpers
@@ -52,9 +47,30 @@ def crop_with_margin(arr: np.ndarray, mins: np.ndarray, maxs: np.ndarray, margin
     sl = tuple(slice(int(a), int(b)) for a, b in zip(mins2, maxs2))
     return arr[sl], sl
 
-def hu_window_float32(img_f32: np.ndarray) -> np.ndarray:
-    """Clip to HU window and keep float32 (preserves negatives)."""
-    return np.clip(img_f32, HU_LO, HU_HI).astype(np.float32)
+def hu_window_int16(img_f32: np.ndarray) -> np.ndarray:
+    """Clip to HU window and store as SIGNED int16 (keeps negatives)."""
+    clipped = np.clip(img_f32, HU_LO, HU_HI)
+    return clipped.astype(np.int16)
+
+def make_img_header_like(src_nii: nib.Nifti1Image):
+    """Create a safe header: int16 + slope/inter set (prevents nan scaling)."""
+    hdr = src_nii.header.copy()
+    hdr.set_data_dtype(np.int16)
+    hdr["scl_slope"] = 1
+    hdr["scl_inter"] = 0
+    hdr["cal_min"] = HU_LO
+    hdr["cal_max"] = HU_HI
+    return hdr
+
+def make_lab_header_like(src_nii: nib.Nifti1Image):
+    """Labels should be uint8 (small integers)."""
+    hdr = src_nii.header.copy()
+    hdr.set_data_dtype(np.uint8)
+    hdr["scl_slope"] = 1
+    hdr["scl_inter"] = 0
+    hdr["cal_min"] = 0
+    hdr["cal_max"] = 255
+    return hdr
 
 # -------------------------
 # Main loop
@@ -76,37 +92,29 @@ try:
         if not lab_path.exists():
             raise FileNotFoundError(f"Missing label for {case_id}: {lab_path}")
 
-        # Load
+        # Load (float32 for math)
         img_nii = nib.load(str(img_path))
         lab_nii = nib.load(str(lab_path))
 
-        img = img_nii.get_fdata().astype(np.float32)
-        lab = lab_nii.get_fdata().astype(np.int16)
+        img = img_nii.get_fdata(dtype=np.float32)
+        lab = lab_nii.get_fdata(dtype=np.float32).astype(np.int16)
 
-        # --- sanity check SOURCE looks like HU ---
-       
+        # sanity check source HU
         if idx == 0:
             print("SOURCE example", img_path.name, "min/max:", float(img.min()), float(img.max()))
             print("SOURCE frac<0:", float((img < 0).mean()))
-            if float((img < 0).mean()) < 0.01:
-                print(" WARNING: Dataset001 has almost no negatives. Are you sure it is true HU?")
-                print(" If Dataset001 was already modified, your Dataset002 will be broken again.")
 
-        # 1) HU window ONLY keep negatives!
-        img_win = hu_window_float32(img)
+        # 1) HU window -> int16 (keeps negatives)
+        img_win = hu_window_int16(img)
 
-        # quick sanity after window
         if idx == 0:
-            p = np.percentile(img_win, [0, 1, 50, 99, 100])
-            print("WIN example min/max:", float(img_win.min()), float(img_win.max()))
+            print("WIN example stored dtype:", img_win.dtype)
+            print("WIN min/max:", int(img_win.min()), int(img_win.max()))
             print("WIN frac<0:", float((img_win < 0).mean()))
-            print("WIN percentiles [0,1,50,99,100]:", p.tolist())
-            # hard-stop if we still lost negatives
+            print("WIN percentiles [0,1,50,99,100]:",
+                  np.percentile(img_win.astype(np.float32), [0,1,50,99,100]).tolist())
             if float((img_win < 0).mean()) == 0.0:
-                raise RuntimeError(
-                    "After windowing, frac<0 is still 0.0. That means input is not HU (already shifted). "
-                    "Fix Dataset001 source first."
-                )
+                raise RuntimeError("Windowed image has no negatives. That means your SOURCE is not HU.")
 
         # 2) ROI crop from LABEL bbox
         bb = bbox_from_mask(lab > 0)
@@ -115,12 +123,16 @@ try:
             img_win, sl = crop_with_margin(img_win, mins, maxs, CROP_MARGIN)
             lab = lab[sl]
 
-        # 3) Save outputs (float32 image, int16 label)
-        out_img = nib.Nifti1Image(img_win.astype(np.float32), img_nii.affine)
-        out_img.set_data_dtype(np.float32)
+        # 3) Save outputs (SAFE headers)
+        img_hdr = make_img_header_like(img_nii)
+        out_img = nib.Nifti1Image(img_win.astype(np.int16), img_nii.affine, header=img_hdr)
+        out_img.set_qform(img_nii.get_qform(), code=img_nii.header.get_qform_code())
+        out_img.set_sform(img_nii.get_sform(), code=img_nii.header.get_sform_code())
 
-        out_lab = nib.Nifti1Image(lab.astype(np.int16), lab_nii.affine)
-        out_lab.set_data_dtype(np.int16)
+        lab_hdr = make_lab_header_like(lab_nii)
+        out_lab = nib.Nifti1Image(lab.astype(np.uint8), lab_nii.affine, header=lab_hdr)
+        out_lab.set_qform(lab_nii.get_qform(), code=lab_nii.header.get_qform_code())
+        out_lab.set_sform(lab_nii.get_sform(), code=lab_nii.header.get_sform_code())
 
         nib.save(out_img, str(imagesTr_dst / img_path.name))
         nib.save(out_lab, str(labelsTr_dst / lab_path.name))
