@@ -3,13 +3,13 @@ from pathlib import Path
 import numpy as np
 import nibabel as nib
 
-print("=== REBUILDING Dataset002: HU window [-200, 500], NO label crop, store int16 ===")
+print("=== REBUILDING Dataset002: HU window [-1000, 2000] store int16 ===")
 
 # -------------------------
 # Configuration
 # -------------------------
-HU_LO = -200.0
-HU_HI = 500.0
+HU_LO = -1000.0
+HU_HI = 2000.0
 
 nnUNet_raw = Path("/content/drive/MyDrive/FYP_nnUNet/nnUNet_raw")
 
