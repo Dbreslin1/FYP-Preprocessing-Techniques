@@ -11,7 +11,7 @@ import json
 # CONFIG
 #Google Drive nnU-Net root
 DRIVE_ROOT = Path("/content/drive/MyDrive")
-NNUNET_ROOT = DRIVE_ROOT / "nnUNet"
+NNUNET_ROOT = DRIVE_ROOT / "FYP_nnUNet"
 
 # Standard nnU-Net folders
 NNUNET_RAW = NNUNET_ROOT / "nnUNet_raw"
