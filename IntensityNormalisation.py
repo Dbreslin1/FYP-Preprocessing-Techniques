@@ -5,9 +5,6 @@ import nibabel as nib
 
 print("=== REBUILDING Dataset002: HU window [-1000, 2000] store int16 ===")
 
-# -------------------------
-# Configuration
-# -------------------------
 HU_LO = -1000.0
 HU_HI = 2000.0
 
@@ -21,37 +18,22 @@ labelsTr_src = SRC / "labelsTr"
 imagesTr_dst = DST / "imagesTr"
 labelsTr_dst = DST / "labelsTr"
 
-# -------------------------
-# Helpers
-# -------------------------
 def hu_window_int16(img_f32: np.ndarray) -> np.ndarray:
-    """Clip to HU window and store as SIGNED int16 (keeps negatives)."""
     return np.clip(img_f32, HU_LO, HU_HI).astype(np.int16)
 
 def save_nifti_like(ref_nii: nib.Nifti1Image, data: np.ndarray, out_path: Path, dtype):
-    """
-    Save NIfTI preserving affine + copying header fields safely
-    without assigning out.header (some nibabel builds make it read-only).
-    """
     out = nib.Nifti1Image(data.astype(dtype), ref_nii.affine)
-
-    # set dtype safely
     out.set_data_dtype(dtype)
 
     ref_hdr = ref_nii.header
-
-    # Copy qform/sform if available
     try:
         out.set_qform(ref_nii.get_qform(), code=int(ref_hdr["qform_code"]))
     except Exception:
         pass
-
     try:
         out.set_sform(ref_nii.get_sform(), code=int(ref_hdr["sform_code"]))
     except Exception:
         pass
-
-    # Copy pixdim if present
     try:
         out.header["pixdim"] = ref_hdr["pixdim"]
     except Exception:
@@ -63,53 +45,51 @@ def save_nifti_like(ref_nii: nib.Nifti1Image, data: np.ndarray, out_path: Path, 
 
     nib.save(out, str(out_path))
 
-# -------------------------
-# Prepare destination folders
-# -------------------------
+# prepare destination folders
 imagesTr_dst.mkdir(parents=True, exist_ok=True)
 labelsTr_dst.mkdir(parents=True, exist_ok=True)
 
-# wipe dst contents so you truly overwrite Dataset002
+# wipe dst contents
 for p in imagesTr_dst.glob("*"):
     p.unlink()
 for p in labelsTr_dst.glob("*"):
     p.unlink()
 
-# -------------------------
-# Main loop
-# -------------------------
 img_files = sorted(imagesTr_src.glob("*_0000.nii.gz"))
-if len(img_files) == 0:
+if not img_files:
     raise FileNotFoundError(f"No images found in {imagesTr_src}")
 
 print("SRC:", SRC)
 print("DST:", DST)
 print("Total images found:", len(img_files))
 
-written = 0
-
-# sanity prints on first case
+# sanity on first case
 first_img = img_files[0]
 first_case_id = first_img.name.replace("_0000.nii.gz", "")
 first_lab = labelsTr_src / f"{first_case_id}.nii.gz"
 if not first_lab.exists():
     raise FileNotFoundError(f"Missing label for first case: {first_lab}")
 
-img0 = nib.load(str(first_img)).get_fdata(dtype=np.float32)
+img0_nii = nib.load(str(first_img))
+img0 = img0_nii.get_fdata(dtype=np.float32)
+
+lab0_nii = nib.load(str(first_lab))
+lab0 = np.asanyarray(lab0_nii.dataobj).astype(np.int16)
+
 print("\n[SOURCE sanity]")
 print("file:", first_img.name)
 print("source min/max:", float(img0.min()), float(img0.max()))
-print("source frac<0:", float((img0 < 0).mean()))
 print("source percentiles [0,1,50,99,100]:", np.percentile(img0, [0,1,50,99,100]).tolist())
+print("label uniques:", np.unique(lab0))
 
 img0_win = hu_window_int16(img0)
 print("\n[WINDOW sanity]")
 print("window dtype:", img0_win.dtype, "shape:", img0_win.shape)
 print("window min/max:", int(img0_win.min()), int(img0_win.max()))
-print("window frac<0:", float((img0_win < 0).mean()))
 print("window percentiles [0,1,50,99,100]:", np.percentile(img0_win.astype(np.float32), [0,1,50,99,100]).tolist())
 
-# now process all
+written = 0
+
 for img_path in img_files:
     case_id = img_path.name.replace("_0000.nii.gz", "")
     lab_path = labelsTr_src / f"{case_id}.nii.gz"
@@ -120,7 +100,11 @@ for img_path in img_files:
     lab_nii = nib.load(str(lab_path))
 
     img = img_nii.get_fdata(dtype=np.float32)
-    lab = lab_nii.get_fdata(dtype=np.float32).astype(np.int16)
+    lab = np.asanyarray(lab_nii.dataobj).astype(np.int16)
+
+    u = np.unique(lab)
+    if not np.all(np.isin(u, [0,1,2,3])):
+        raise ValueError(f"Bad labels in {case_id}: uniques={u[:20]}")
 
     img_win = hu_window_int16(img)
 
@@ -131,31 +115,16 @@ for img_path in img_files:
     if written % 10 == 0:
         print(f"Processed {written}/{len(img_files)}")
 
-# -------------------------
-# dataset.json
-# -------------------------
-src_json_path = SRC / "dataset.json"
-dst_json_path = DST / "dataset.json"
-
-if src_json_path.exists():
-    src_json = json.load(open(src_json_path, "r"))
-    dst_json = dict(src_json)
-else:
-    dst_json = {
-        "name": "ImageTBAD_HUwin",
-        "tensorImageSize": "3D",
-        "modality": {"0": "CT"},
-        "labels": {"background": 0, "class1": 1, "class2": 2, "class3": 3},
-        "file_ending": ".nii.gz",
-    }
-
-dst_json["name"] = "ImageTBAD_HUwin"
-dst_json["file_ending"] = ".nii.gz"
-dst_json["numTraining"] = len(list(imagesTr_dst.glob("*_0000.nii.gz")))
-dst_json["numTest"] = 0
-
-with open(dst_json_path, "w") as f:
+# dataset.json (v2 minimal)
+dst_json = {
+    "name": "ImageTBAD_HUwin",
+    "channel_names": {"0": "CT"},
+    "labels": {"background": 0, "class1": 1, "class2": 2, "class3": 3},
+    "numTraining": written,
+    "file_ending": ".nii.gz"
+}
+with open(DST / "dataset.json", "w") as f:
     json.dump(dst_json, f, indent=2)
 
-print("\n dataset.json updated. numTraining =", dst_json["numTraining"])
-print(f"DONE. Wrote {written} cases to {DST.name}")
+print("\nDataset002 dataset.json written. numTraining =", written)
+print("DONE. Wrote", written, "cases to", DST.name)
