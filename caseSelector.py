@@ -19,7 +19,7 @@ NNUNET_PREPROCESSED = NNUNET_ROOT / "nnUNet_preprocessed"
 NNUNET_RESULTS = NNUNET_ROOT / "nnUNet_results"
 
 
-SRC_DATASET_NAME = "Dataset001_ImageTBAD"   
+SRC_DATASET_NAME = "/content/drive/MyDrive/FYP_nnUNet/data/imagetbad/extracted_full"  
 
 # The new 50-case baseline dataset
 DST_DATASET_ID = 1
